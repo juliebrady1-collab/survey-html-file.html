@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Future Values Survey - Ternary Plot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #eff6ff 0%, #ffffff 50%, #faf5ff 100%);
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-gray-900 mb-3">Future Values Survey</h1>
+            <p class="text-lg text-gray-600">Help us understand how human values might evolve</p>
+        </header>
+
+        <div id="app"></div>
+    </div>
+
+    <script>
+        // Storage mock for standalone HTML
+        const storage = {
+            data: {
+                'survey-present-data': [],
+                'survey-future-data': []
+            },
+            get(key) {
+                const value = this.data[key];
+                return value ? { key, value: JSON.stringify(value), shared: true } : null;
+            },
+            set(key, value) {
+                this.data[key] = JSON.parse(value);
+                localStorage.setItem(key, value);
+                return { key, value, shared: true };
+            },
+            list() {
+                return { keys: Object.keys(this.data), shared: true };
+            }
+        };
+
+        // Load from localStorage if available
+        try {
+            const presentData = localStorage.getItem('survey-present-data');
+            const futureData = localStorage.getItem('survey-future-data');
+            if (presentData) storage.data['survey-present-data'] = JSON.parse(presentData);
+            if (futureData) storage.data['survey-future-data'] = JSON.parse(futureData);
+        } catch (e) {
+            console.log('No saved data found');
+        }
+
+        // App state
+        let state = {
+            step: 'intro',
+            presentData: storage.data['survey-present-data'] || [],
+            futureData: storage.data['survey-future-data'] || [],
+            userPresent: null,
+            userFuture: null,
+            hoverPoint: null
+        };
+
+        // Ternary plot drawing
+        function drawTernaryPlot(canvas, data, userPoint, hoverPoint) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            const size = 280;
+            const centerX = width / 2;
+            const centerY = height / 2 + 20;
+            const h = size * Math.sqrt(3) / 2;
+            
+            const top = { x: centerX, y: centerY - h * 2/3 };
+            const left = { x: centerX - size / 2, y: centerY + h / 3 };
+            const right = { x: centerX + size / 2, y: centerY + h / 3 };
+            
+            // Draw triangle
+            ctx.beginPath();
+            ctx.moveTo(top.x, top.y);
+            ctx.lineTo(left.x, left.y);
+            ctx.lineTo(right.x, right.y);
+            ctx.closePath();
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Draw grid
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.lineWidth = 1;
+            for (let i = 1; i < 5; i++) {
+                const ratio = i / 5;
+                
+                const p1 = {
+                    x: left.x + (top.x - left.x) * ratio,
+                    y: left.y + (top.y - left.y) * ratio
+                };
+                const p2 = {
+                    x: right.x + (top.x - right.x) * ratio,
+                    y: right.y + (top.y - right.y) * ratio
+                };
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+                
+                const p3 = {
+                    x: top.x + (right.x - top.x) * ratio,
+                    y: top.y + (right.y - top.y) * ratio
+                };
+                const p4 = {
+                    x: left.x + (right.x - left.x) * ratio,
+                    y: left.y + (right.y - left.y) * ratio
+                };
+                ctx.beginPath();
+                ctx.moveTo(p3.x, p3.y);
+                ctx.lineTo(p4.x, p4.y);
+                ctx.stroke();
+                
+                const p5 = {
+                    x: top.x + (left.x - top.x) * ratio,
+                    y: top.y + (left.y - top.y) * ratio
+                };
+                const p6 = {
+                    x: right.x + (left.x - right.x) * ratio,
+                    y: right.y + (left.y - right.y) * ratio
+                };
+                ctx.beginPath();
+                ctx.moveTo(p5.x, p5.y);
+                ctx.lineTo(p6.x, p6.y);
+                ctx.stroke();
+            }
+            
+            // Convert ternary to cartesian
+            const ternaryToCart = (e, h, a) => {
+                const total = e + h + a;
+                const en = e / total;
+                const hn = h / total;
+                const an = a / total;
+                
+                return {
+                    x: left.x + (right.x - left.x) * an + (top.x - left.x) * hn,
+                    y: left.y + (right.y - left.y) * an + (top.y - left.y) * hn
+                };
+            };
+            
+            // Draw data points
+            data.forEach(point => {
+                const pos = ternaryToCart(point.efficiency, point.empathy, point.autonomy);
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 4, 0, 2 * Math.PI);
+                ctx.fillStyle = 'rgba(59, 130, 246, 0.5)';
+                ctx.fill();
+            });
+            
+            // Draw user point
+            if (userPoint) {
+                const pos = ternaryToCart(userPoint.efficiency, userPoint.empathy, userPoint.autonomy);
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 8, 0, 2 * Math.PI);
+                ctx.fillStyle = '#10b981';
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
+            // Draw hover point
+            if (hoverPoint) {
+                const pos = ternaryToCart(hoverPoint.efficiency, hoverPoint.empathy, hoverPoint.autonomy);
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 6, 0, 2 * Math.PI);
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
+            // Labels
+            ctx.fillStyle = '#1f2937';
+            ctx.font = 'bold 14px system-ui';
+            ctx.textAlign = 'center';
+            ctx.fillText('Efficiency', top.x, top.y - 15);
+            ctx.fillText('Human Empathy', left.x - 60, left.y + 25);
+            ctx.fillText('Personal Autonomy', right.x + 70, right.y + 25);
+        }
+
+        // Convert canvas click to ternary coordinates
+        function getClickCoordinates(canvas, e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const size = 280;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2 + 20;
+            const h = size * Math.sqrt(3) / 2;
+            
+            const top = { x: centerX, y: centerY - h * 2/3 };
+            const left = { x: centerX - size / 2, y: centerY + h / 3 };
+            const right = { x: centerX + size / 2, y: centerY + h / 3 };
+            
+            const v0 = { x: right.x - left.x, y: right.y - left.y };
+            const v1 = { x: top.x - left.x, y: top.y - left.y };
+            const v2 = { x: x - left.x, y: y - left.y };
+            
+            const dot00 = v0.x * v0.x + v0.y * v0.y;
+            const dot01 = v0.x * v1.x + v0.y * v1.y;
+            const dot02 = v0.x * v2.x + v0.y * v2.y;
+            const dot11 = v1.x * v1.x + v1.y * v1.y;
+            const dot12 = v1.x * v2.x + v1.y * v2.y;
+            
+            const invDenom = 1 / (dot00 * dot11 - dot01 * dot01);
+            const u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+            const v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+            
+            if (u >= 0 && v >= 0 && u + v <= 1) {
+                const autonomy = Math.round(u * 100);
+                const empathy = Math.round(v * 100);
+                const efficiency = 100 - autonomy - empathy;
+                
+                if (efficiency >= 0 && empathy >= 0 && autonomy >= 0) {
+                    return { efficiency, empathy, autonomy };
+                }
+            }
+            return null;
+        }
+
+        // Render functions
+        function renderIntro() {
+            return `
+                <div class="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-8">
+                    <h2 class="text-2xl font-bold text-gray-900 mb-4">Welcome!</h2>
+                    <p class="text-gray-700 mb-4">
+                        This survey explores three fundamental values and how they might change over time:
+                    </p>
+                    <ul class="space-y-3 mb-6">
+                        <li class="flex items-start">
+                            <span class="text-blue-500 font-bold mr-2">•</span>
+                            <span><strong>Efficiency:</strong> Optimizing resources, productivity, and outcomes</span>
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-green-500 font-bold mr-2">•</span>
+                            <span><strong>Human Empathy:</strong> Understanding, compassion, and emotional connection</span>
+                        </li>
+                        <li class="flex items-start">
+                            <span class="text-purple-500 font-bold mr-2">•</span>
+                            <span><strong>Personal Autonomy:</strong> Individual freedom, choice, and self-determination</span>
+                        </li>
+                    </ul>
+                    <p class="text-gray-700 mb-6">
+                        You'll place points on two triangular plots showing how you believe society prioritizes these values today and how they might be prioritized in 2075.
+                    </p>
+                    <button onclick="startSurvey()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition">
+                        Begin Survey →
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderPresent() {
+            return `
+                <div class="bg-white rounded-xl shadow-lg p-8">
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-gray-600">Step 1 of 2</span>
+                            <span class="text-sm font-medium text-gray-600">Present Day</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-blue-600 h-2 rounded-full" style="width: 50%"></div>
+                        </div>
+                    </div>
+                    
+                    <p class="text-center text-gray-700 mb-8 text-lg">
+                        Click anywhere on the triangle to show how you think society <strong>currently prioritizes</strong> these three values.
+                    </p>
+                    
+                    <div class="flex flex-col items-center">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Present Day Values</h3>
+                        <div class="relative">
+                            <canvas id="present-canvas" width="500" height="450" class="cursor-crosshair"></canvas>
+                            <div id="hover-tooltip" class="hidden absolute top-2 left-2 bg-white border border-gray-300 rounded px-3 py-2 text-sm shadow-lg"></div>
+                        </div>
+                    </div>
+                    
+                    ${state.userPresent ? `
+                        <div class="mt-8 p-4 bg-green-50 border border-green-200 rounded-lg">
+                            <h4 class="font-semibold text-gray-900 mb-2">Your Selection:</h4>
+                            <div class="grid grid-cols-3 gap-4 text-center">
+                                <div>
+                                    <div class="text-2xl font-bold text-blue-600">${state.userPresent.efficiency}%</div>
+                                    <div class="text-sm text-gray-600">Efficiency</div>
+                                </div>
+                                <div>
+                                    <div class="text-2xl font-bold text-green-600">${state.userPresent.empathy}%</div>
+                                    <div class="text-sm text-gray-600">Empathy</div>
+                                </div>
+                                <div>
+                                    <div class="text-2xl font-bold text-purple-600">${state.userPresent.autonomy}%</div>
+                                    <div class="text-sm text-gray-600">Autonomy</div>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <button onclick="submitPresent()" ${!state.userPresent ? 'disabled' : ''} 
+                        class="w-full mt-6 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition">
+                        Continue to Future →
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderFuture() {
+            return `
+                <div class="bg-white rounded-xl shadow-lg p-8">
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-gray-600">Step 2 of 2</span>
+                            <span class="text-sm font-medium text-gray-600">Year 2075</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-blue-600 h-2 rounded-full" style="width: 100%"></div>
+                        </div>
+                    </div>
+                    
+                    <p class="text-center text-gray-700 mb-8 text-lg">
+                        Now imagine the year 2075. How do you think society will prioritize these values <strong>50 years from now</strong>?
+                    </p>
+                    
+                    <div class="flex flex-col items-center">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4">Year 2075 Values</h3>
+                        <div class="relative">
+                            <canvas id="future-canvas" width="500" height="450" class="cursor-crosshair"></canvas>
+                            <div id="hover-tooltip-future" class="hidden absolute top-2 left-2 bg-white border border-gray-300 rounded px-3 py-2 text-sm shadow-lg"></div>
+                        </div>
+                    </div>
+                    
+                    ${state.userFuture ? `
+                        <div class="mt-8 p-4 bg-green-50 border border-green-200 rounded-lg">
+                            <h4 class="font-semibold text-gray-900 mb-2">Your Selection:</h4>
+                            <div class="grid grid-cols-3 gap-4 text-center">
+                                <div>
+                                    <div class="text-2xl font-bold text-blue-600">${state.userFuture.efficiency}%</div>
+                                    <div class="text-sm text-gray-600">Efficiency</div>
+                                </div>
+                                <div>
+                                    <div class="text-2xl font-bold text-green-600">${state.userFuture.empathy}%</div>
+                                    <div class="text-sm text-gray-600">Empathy</div>
+                                </div>
+                                <div>
+                                    <div class="text-2xl font-bold text-purple-600">${state.userFuture.autonomy}%</div>
+                                    <div class="text-sm text-gray-600">Autonomy</div>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <button onclick="submitFuture()" ${!state.userFuture ? 'disabled' : ''} 
+                        class="w-full mt-6 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition">
+                        Submit Survey
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderComplete() {
+            return `
+                <div class="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-8 text-center">
+                    <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-3">Thank You!</h2>
+                    <p class="text-gray-700 mb-8">
+                        Your response has been recorded. You've contributed to understanding how human values might evolve over the next 50 years.
+                    </p>
+                    <div class="flex gap-4 justify-center">
+                        <button onclick="viewResults()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition">
+                            📊 View Results
+                        </button>
+                        <button onclick="downloadData()" class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-3 px-6 rounded-lg transition">
+                            ⬇️ Download Data
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderResults() {
+            return `
+                <div class="bg-white rounded-xl shadow-lg p-8">
+                    <h2 class="text-2xl font-bold text-gray-900 mb-6 text-center">Survey Results</h2>
+                    <p class="text-center text-gray-600 mb-8">
+                        Total Responses: <strong>${state.presentData.length}</strong>
+                    </p>
+                    
+                    <div class="grid md:grid-cols-2 gap-8">
+                        <div class="flex flex-col items-center">
+                            <h3 class="text-xl font-semibold text-gray-800 mb-4">Present Day Responses</h3>
+                            <canvas id="results-present-canvas" width="500" height="450"></canvas>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <h3 class="text-xl font-semibold text-gray-800 mb-4">Year 2075 Responses</h3>
+                            <canvas id="results-future-canvas" width="500" height="450"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-8 flex gap-4 justify-center">
+                        <button onclick="restartSurvey()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition">
+                            Take Survey Again
+                        </button>
+                        <button onclick="downloadData()" class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-3 px-6 rounded-lg transition">
+                            ⬇️ Download Data
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            
+            switch(state.step) {
+                case 'intro':
+                    app.innerHTML = renderIntro();
+                    break;
+                case 'present':
+                    app.innerHTML = renderPresent();
+                    setTimeout(() => {
+                        const canvas = document.getElementById('present-canvas');
+                        drawTernaryPlot(canvas, [], state.userPresent, state.hoverPoint);
+                        
+                        canvas.addEventListener('click', (e) => {
+                            const coords = getClickCoordinates(canvas, e);
+                            if (coords) {
+                                state.userPresent = coords;
+                                render();
+                            }
+                        });
+                        
+                        canvas.addEventListener('mousemove', (e) => {
+                            const coords = getClickCoordinates(canvas, e);
+                            state.hoverPoint = coords;
+                            drawTernaryPlot(canvas, [], state.userPresent, state.hoverPoint);
+                            
+                            const tooltip = document.getElementById('hover-tooltip');
+                            if (coords) {
+                                tooltip.innerHTML = `
+                                    <div>Efficiency: ${coords.efficiency}%</div>
+                                    <div>Empathy: ${coords.empathy}%</div>
+                                    <div>Autonomy: ${coords.autonomy}%</div>
+                                `;
+                                tooltip.classList.remove('hidden');
+                            } else {
+                                tooltip.classList.add('hidden');
+                            }
+                        });
+                        
+                        canvas.addEventListener('mouseleave', () => {
+                            state.hoverPoint = null;
+                            drawTernaryPlot(canvas, [], state.userPresent, null);
+                            document.getElementById('hover-tooltip').classList.add('hidden');
+                        });
+                    }, 0);
+                    break;
+                case 'future':
+                    app.innerHTML = renderFuture();
+                    setTimeout(() => {
+                        const canvas = document.getElementById('future-canvas');
+                        drawTernaryPlot(canvas, [], state.userFuture, state.hoverPoint);
+                        
+                        canvas.addEventListener('click', (e) => {
+                            const coords = getClickCoordinates(canvas, e);
+                            if (coords) {
+                                state.userFuture = coords;
+                                render();
+                            }
+                        });
+                        
+                        canvas.addEventListener('mousemove', (e) => {
+                            const coords = getClickCoordinates(canvas, e);
+                            state.hoverPoint = coords;
+                            drawTernaryPlot(canvas, [], state.userFuture, state.hoverPoint);
+                            
+                            const tooltip = document.getElementById('hover-tooltip-future');
+                            if (coords) {
+                                tooltip.innerHTML = `
+                                    <div>Efficiency: ${coords.efficiency}%</div>
+                                    <div>Empathy: ${coords.empathy}%</div>
+                                    <div>Autonomy: ${coords.autonomy}%</div>
+                                `;
+                                tooltip.classList.remove('hidden');
+                            } else {
+                                tooltip.classList.add('hidden');
+                            }
+                        });
+                        
+                        canvas.addEventListener('mouseleave', () => {
+                            state.hoverPoint = null;
+                            drawTernaryPlot(canvas, [], state.userFuture, null);
+                            document.getElementById('hover-tooltip-future').classList.add('hidden');
+                        });
+                    }, 0);
+                    break;
+                case 'complete':
+                    app.innerHTML = renderComplete();
+                    break;
+                case 'results':
+                    app.innerHTML = renderResults();
+                    setTimeout(() => {
+                        const presentCanvas = document.getElementById('results-present-canvas');
+                        const futureCanvas = document.getElementById('results-future-canvas');
+                        drawTernaryPlot(presentCanvas, state.presentData, null, null);
+                        drawTernaryPlot(futureCanvas, state.futureData, null, null);
+                    }, 0);
+                    break;
+            }
+        }
+
+        // Action handlers
+        function startSurvey() {
+            state.step = 'present';
+            state.userPresent = null;
+            state.userFuture = null;
+            render();
+        }
+
+        function submitPresent() {
+            if (state.userPresent) {
+                state.step = 'future';
+                render();
+            }
+        }
+
+        function submitFuture() {
+            if (state.userFuture) {
+                const presentData = [...state.presentData, { ...state.userPresent, timestamp: new Date().toISOString() }];
+                const futureData = [...state.futureData, { ...state.userFuture, timestamp: new Date().toISOString() }];
+                
+                storage.set('survey-present-data', JSON.stringify(presentData));
+                storage.set('survey-future-data', JSON.stringify(futureData));
+                
+                state.presentData = presentData;
+                state.futureData = futureData;
+                state.step = 'complete';
+                render();
+            }
+        }
+
+        function viewResults() {
+            state.step = 'results';
+            render();
+        }
+
+        function restartSurvey() {
+            state.step = 'intro';
+            state.userPresent = null;
+            state.userFuture = null;
+            render();
+        }
+
+        function downloadData() {
+            const data = {
+                presentDay: state.presentData,
+                year2075: state.futureData,
+                totalResponses: state.presentData.length
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ternary-survey-data-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Initial render
+        render();
+    </script>
+</body>
+</html>
